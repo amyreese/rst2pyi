@@ -1,0 +1,19 @@
+language: python
+dist: xenial
+sudo: required
+env:
+python:
+    - "3.6"
+    - "3.7"
+    - "3.8-dev"
+install:
+    - "make setup"
+    - "pip install ."
+script:
+    - "make lint test"
+after_success:
+    - "codecov"
+    - "coveralls"
+matrix:
+    allow_failures:
+        - python: "3.8-dev"
