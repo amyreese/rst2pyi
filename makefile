@@ -34,5 +34,5 @@ test:
 clean:
 	rm -rf build dist README MANIFEST *.egg-info
 
-distclean:
+distclean: clean
 	rm -rf .venv
