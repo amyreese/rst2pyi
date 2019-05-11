@@ -2,18 +2,32 @@
 # Licensed under the MIT license
 
 import builtins
+import logging
 import re
 import typing
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from .config import Config
-from .types import Lines
+from attr import astuple
 
+from .types import Config, Line, Lines
+
+log = logging.getLogger(__name__)
 directive_re = re.compile(r"\s*..\s+(\w+)::\s+([^\n]+)")
 callable_re = re.compile(r"\s*(\w+)(?:\(([^\)]*)\))?")
 param_re = re.compile(r"\s*:(\w+)\s+(.+)\s+(\w+):")
+
+
+def setup_logger(debug: bool = False):
+    logging.addLevelName(logging.DEBUG, "DBG")
+    logging.addLevelName(logging.INFO, "INF")
+    logging.addLevelName(logging.WARNING, "WRN")
+    logging.addLevelName(logging.ERROR, "ERR")
+    logging.basicConfig(
+        level=logging.DEBUG if debug else logging.INFO,
+        format="%(levelname)s %(message)s",
+    )
 
 
 class Converter:
@@ -28,31 +42,33 @@ class Converter:
         lines = []
         prefix_re = self.prefix_re
         with open(source, "r") as f:
-            for line in f:
-                match = prefix_re.match(line)
+            for lineno, content in enumerate(f, start=1):
+                match = prefix_re.match(content)
                 if match:
-                    line = line[match.end() + 1 :]
-                    dmatch = directive_re.match(line)
-                    pmatch = param_re.match(line)
+                    content = content[match.end() + 1 :]
+                    dmatch = directive_re.match(content)
+                    pmatch = param_re.match(content)
 
                     if dmatch:
-                        lines.append(dmatch.groups())
+                        kind, *extra = dmatch.groups()
+                        lines.append(Line(source, lineno, kind, extra))
                     elif pmatch:
-                        lines.append(pmatch.groups())
+                        kind, *extra = pmatch.groups()
+                        lines.append(Line(source, lineno, kind, extra))
 
         return lines
 
     def parse_dir(self, source_dir: Path) -> Dict[Path, Lines]:
-        source_dir = source_dir.expanduser().resolve()
+        source_dir = source_dir.expanduser()
         docs: Dict[Path, Lines] = {}
 
         for path in source_dir.iterdir():
             if path.is_dir():
                 docs.update(self.parse_dir(path))
             elif path.is_file():
-                doc = self.parse_file(path)
-                if doc:
-                    docs[path] = doc
+                lines = self.parse_file(path)
+                if lines:
+                    docs[path] = lines
 
         return docs
 
@@ -61,43 +77,60 @@ class Converter:
         for _path, lines in contents.items():
             module: str = "builtins"
             for line in lines:
-                kind, *extra = line
-                if kind in ("module", "currentmodule"):
-                    module = extra[0]
-                if kind not in self.config.ignore_directives:
+                if line.kind in ("module", "currentmodule"):
+                    module = line.extra[0]
+                if line.kind not in self.config.ignore_directives:
                     modules[module].append(line)
         for name in modules:
             modules[name] = list(
-                sorted(modules[name], key=lambda l: 1 if l[0] == "module" else 2)
+                sorted(modules[name], key=lambda l: 1 if l.kind == "module" else 2)
             )
         return modules
 
+    def render(self, line: Line, kind: str = None, **kwargs: str) -> str:
+        if kind is None:
+            kind = line.kind
+        tpl = getattr(self.config, f"{kind}_template")
+        return tpl.format(
+            source=line.source,
+            lineno=line.lineno,
+            kind=kind,
+            extra=line.extra,
+            **kwargs,
+        )
+
     def gen_stub(self, dest: Path, lines: Lines) -> None:
-        print(f"{dest}")
+        log.debug("generating stub %s", dest)
         config = self.config
         content: List[str] = []
         type_names: Set[str] = set()
         count = len(lines)
         idx = 0
         while idx < count:
-            kind, *extra = lines[idx]
-            if kind in ("modules",):
+            line = lines[idx]
+            path, lineno, kind, extra = astuple(line)
+            if kind in ("module",):
                 name, *_ = extra
-                content.append(config.module_template.format(name=name))
+                content.append(self.render(line, name=name))
 
             elif kind in ("class", "method", "function"):
                 call, = extra
                 match = callable_re.match(call)
                 if not match:
                     idx += 1
-                    raise Exception("unknown format of callable directive")
+                    log.error(
+                        "%s:%d: failed to parse %s directive: %s",
+                        path,
+                        lineno,
+                        kind,
+                        call,
+                    )
+                    continue
 
                 name, param_str = match.groups()
                 if param_str is None:
                     content.append(
-                        getattr(config, f"{kind}_template").format(
-                            name=name, args="", ret_type=""
-                        )
+                        self.render(line, name=name, args="", ret_type="Any")
                     )
                     idx += 1
                     continue
@@ -108,9 +141,9 @@ class Converter:
                     for n, _, v in [p.partition("=")]
                 ]
 
-                while idx + 1 < count and lines[idx + 1][0] == "param":
+                while idx + 1 < count and lines[idx + 1].kind == "param":
                     idx += 1
-                    _, p_type, p_name = lines[idx]
+                    p_type, p_name = lines[idx].extra
                     for pidx, (n, _, v) in enumerate(params):
                         if n == p_name:
                             params[pidx][1] = p_type
@@ -118,27 +151,30 @@ class Converter:
 
                 type_names.update(t for _, t, _ in params)
                 args = ", ".join(
-                    config.arg_template.format(
-                        name=n, arg_type=t, equal=" = " if v else "", value=v
+                    self.render(
+                        line,
+                        kind="arg",
+                        name=n,
+                        arg_type=t,
+                        equal=" = " if v else "",
+                        value=v,
                     )
                     for n, t, v in params
                 )
-                content.append(
-                    getattr(config, f"{kind}_template").format(
-                        name=name, args=args, ret_type="Any"
-                    )
-                )
+                content.append(self.render(line, name=name, args=args, ret_type="Any"))
             elif kind in ("attribute", "data"):
                 name, *_ = extra
                 attr_type = "Any"
                 type_names.add(attr_type)
                 content.append(
-                    config.attribute_template.format(name=name, attr_type=attr_type)
+                    self.render(line, kind="attribute", name=name, attr_type=attr_type)
                 )
             elif kind in ("currentmodule", "note", "warning"):
                 pass  # ignore these directives
             else:
-                print(kind, extra)
+                log.warning(
+                    "%s:%d: unmatched %s directive: %s", path, lineno, kind, extra
+                )
             idx += 1
 
         content.append("")
