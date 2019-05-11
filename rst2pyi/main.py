@@ -1,8 +1,10 @@
 # Copyright 2019 John Reese
 # Licensed under the MIT license
 
-import click
 from pathlib import Path
+
+import click
+
 from .core import Converter
 
 
@@ -14,10 +16,10 @@ from .core import Converter
     "dest_dir",
     type=click.Path(exists=False, file_okay=False, writable=True, resolve_path=True),
 )
-def main(source_dir, dest_dir):
-    source_dir = Path(source_dir)
-    dest_dir = Path(dest_dir)
-    Converter(source_dir, dest_dir).gen_stubs()
+def main(source_dir: str = ".", dest_dir: str = "."):
+    source = Path(source_dir)
+    dest = Path(dest_dir)
+    Converter(source, dest).gen_stubs()
 
 
 if __name__ == "__main__":

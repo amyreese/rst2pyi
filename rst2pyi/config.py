@@ -1,8 +1,9 @@
 # Copyright 2019 John Reese
 # Licensed under the MIT license
 
-from attr import dataclass
 from typing import Set
+
+from attr import dataclass
 
 
 @dataclass
@@ -19,4 +20,3 @@ class Config:
     arg_template: str = "{name}: {arg_type}{equal}{value}"
     import_template: str = "import {name}"
     from_template: str = "from {module} import {name}"
-

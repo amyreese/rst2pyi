@@ -4,16 +4,12 @@
 import builtins
 import re
 import typing
-
 from collections import defaultdict
-from docutils.parsers.rst import Parser
-from docutils.utils import new_document
-from docutils.core import publish_doctree
 from pathlib import Path
-from typing import Dict, Optional, List, Any, Set
+from typing import Any, Dict, List, Set
 
 from .config import Config
-from .types import Document, Lines
+from .types import Lines
 
 directive_re = re.compile(r"\s*..\s+(\w+)::\s+([^\n]+)")
 callable_re = re.compile(r"\s*(\w+)(?:\(([^\)]*)\))?")
@@ -61,8 +57,8 @@ class Converter:
         return docs
 
     def organize(self, contents: Dict[Path, Lines]) -> Dict[str, Lines]:
-        modules: Dict[str, lines] = defaultdict(list)
-        for path, lines in contents.items():
+        modules: Dict[str, Lines] = defaultdict(list)
+        for _path, lines in contents.items():
             module: str = "builtins"
             for line in lines:
                 kind, *extra = line
@@ -84,9 +80,8 @@ class Converter:
         count = len(lines)
         idx = 0
         while idx < count:
-            line = lines[idx]
             kind, *extra = lines[idx]
-            if kind in ("modules"):
+            if kind in ("modules",):
                 name, *_ = extra
                 content.append(config.module_template.format(name=name))
 
@@ -95,10 +90,10 @@ class Converter:
                 match = callable_re.match(call)
                 if not match:
                     idx += 1
-                    continue  # TODO: throw a warning or something?
+                    raise Exception("unknown format of callable directive")
 
-                name, params = match.groups()
-                if params is None:
+                name, param_str = match.groups()
+                if param_str is None:
                     content.append(
                         getattr(config, f"{kind}_template").format(
                             name=name, args="", ret_type=""
@@ -109,14 +104,14 @@ class Converter:
 
                 params = [
                     [n.strip(" []"), "Any", v.strip(" []")]
-                    for p in params.split(",")
+                    for p in param_str.split(",")
                     for n, _, v in [p.partition("=")]
                 ]
 
                 while idx + 1 < count and lines[idx + 1][0] == "param":
                     idx += 1
                     _, p_type, p_name = lines[idx]
-                    for pidx, (n, t, v) in enumerate(params):
+                    for pidx, (n, _, v) in enumerate(params):
                         if n == p_name:
                             params[pidx][1] = p_type
                             break
@@ -172,4 +167,3 @@ class Converter:
             self.dest_dir.mkdir(parents=True, exist_ok=True)
             dest = self.dest_dir / f"{module}.pyi"
             self.gen_stub(dest, data)
-

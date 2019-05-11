@@ -7,4 +7,3 @@ Convert reStructuredText annotations to PEP484 .pyi type stubs
 
 __author__ = "John Reese"
 __version__ = "0.1.0"
-
