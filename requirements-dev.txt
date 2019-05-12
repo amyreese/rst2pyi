@@ -6,4 +6,4 @@ mypy==0.701
 pylint==2.3.1
 python-coveralls==2.9.1
 twine==1.13.0
-wheel==0.33.3
+wheel==0.33.4
