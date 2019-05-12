@@ -16,7 +16,7 @@ from .types import Config, Line, Lines
 log = logging.getLogger(__name__)
 directive_re = re.compile(r"\s*..\s+(\w+)::\s+([^\n]+)")
 callable_re = re.compile(r"\s*(\w+)(?:\(([^\)]*)\))?")
-param_re = re.compile(r"\s*:(\w+)\s+(.+)\s+(\w+):")
+info_re = re.compile(r"\s*:(\w+)\s+[!~]?(.+)\s+(\w+):")
 
 
 def setup_logger(debug: bool = False):
@@ -43,17 +43,18 @@ class Converter:
         prefix_re = self.prefix_re
         with open(source, "r") as f:
             for lineno, content in enumerate(f, start=1):
+                content = content.strip()
                 match = prefix_re.match(content)
                 if match:
                     content = content[match.end() + 1 :]
                     dmatch = directive_re.match(content)
-                    pmatch = param_re.match(content)
+                    imatch = info_re.match(content)
 
                     if dmatch:
                         kind, *extra = dmatch.groups()
                         lines.append(Line(source, lineno, kind, extra))
-                    elif pmatch:
-                        kind, *extra = pmatch.groups()
+                    elif imatch:
+                        kind, *extra = imatch.groups()
                         lines.append(Line(source, lineno, kind, extra))
 
         return lines
@@ -77,13 +78,16 @@ class Converter:
         for _path, lines in contents.items():
             module: str = "builtins"
             for line in lines:
-                if line.kind in ("module", "currentmodule"):
+                if line.kind in self.config.module_directives:
                     module = line.extra[0]
                 if line.kind not in self.config.ignore_directives:
                     modules[module].append(line)
         for name in modules:
             modules[name] = list(
-                sorted(modules[name], key=lambda l: 1 if l.kind == "module" else 2)
+                sorted(
+                    modules[name],
+                    key=lambda l: 1 if l.kind in self.config.module_directives else 2,
+                )
             )
         return modules
 
@@ -106,12 +110,15 @@ class Converter:
         type_names: Set[str] = set()
         count = len(lines)
         idx = 0
+        identified = False
         while idx < count:
             line = lines[idx]
             path, lineno, kind, extra = astuple(line)
-            if kind in ("module",):
-                name, *_ = extra
-                content.append(self.render(line, name=name))
+            if kind in self.config.module_directives:
+                if not identified:
+                    identified = True
+                    name, *_ = extra
+                    content.append(self.render(line, kind="module", name=name))
 
             elif kind in ("class", "method", "function"):
                 call, = extra
@@ -139,6 +146,7 @@ class Converter:
                     [n.strip(" []"), "Any", v.strip(" []")]
                     for p in param_str.split(",")
                     for n, _, v in [p.partition("=")]
+                    if p
                 ]
 
                 while idx + 1 < count and lines[idx + 1].kind == "param":
@@ -169,8 +177,6 @@ class Converter:
                 content.append(
                     self.render(line, kind="attribute", name=name, attr_type=attr_type)
                 )
-            elif kind in ("currentmodule", "note", "warning"):
-                pass  # ignore these directives
             else:
                 log.warning(
                     "%s:%d: unmatched %s directive: %s", path, lineno, kind, extra

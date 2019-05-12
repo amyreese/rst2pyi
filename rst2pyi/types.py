@@ -11,7 +11,8 @@ from attr import dataclass
 class Config:
     # regex to match lines - unmatched lines will not be converted
     line_prefix: str = r"\s*//\|"
-    ignore_directives: Set[str] = {"warning", "note", "currentmodule"}
+    module_directives: Set[str] = {"module", "currentmodule"}
+    ignore_directives: Set[str] = {"warning", "note", "seealso"}
 
     module_template: str = '\n"""\n{name}\n"""\n'
     class_template: str = (
