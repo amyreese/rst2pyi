@@ -31,6 +31,7 @@ setup(
     ],
     license="MIT",
     packages=["rst2pyi", "rst2pyi.tests"],
+    python_requires=">=3.6",
     setup_requires=["setuptools>=38.6.0"],
     install_requires=requirements,
     tests_require=[],
