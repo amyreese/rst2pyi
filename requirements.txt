@@ -1,3 +1,3 @@
 attrs==19.1.0
 click==7.0
-typed_ast
+typed_ast==1.3.5
