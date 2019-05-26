@@ -47,9 +47,9 @@ def main(
                 content = f.read()
             try:
                 parse(content)
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 success = False
-                log.exception(f"validation error for {stub}")
+                log.exception("validation error for %s", stub)
 
         if not success:
             raise click.ClickException("stub validation failed")
