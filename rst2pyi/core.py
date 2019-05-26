@@ -166,7 +166,7 @@ class Converter:
                         arg_type=t,
                         equal=" = " if v else "",
                         value=v,
-                    )
+                    ) if n != "*" else n
                     for n, t, v in params
                 )
                 content.append(self.render(line, name=name, args=args, ret_type="Any"))
