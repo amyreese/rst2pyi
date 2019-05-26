@@ -159,14 +159,18 @@ class Converter:
 
                 type_names.update(t for _, t, _ in params)
                 args = ", ".join(
-                    self.render(
-                        line,
-                        kind="arg",
-                        name=n,
-                        arg_type=t,
-                        equal=" = " if v else "",
-                        value=v,
-                    ) if n != "*" else n
+                    (
+                        self.render(
+                            line,
+                            kind="arg",
+                            name=n,
+                            arg_type=t,
+                            equal=" = " if v else "",
+                            value=v,
+                        )
+                        if n != "*"
+                        else n
+                    )
                     for n, t, v in params
                 )
                 content.append(self.render(line, name=name, args=args, ret_type="Any"))
@@ -202,10 +206,13 @@ class Converter:
         with open(dest, "w") as f:
             f.write("\n".join(content))
 
-    def gen_stubs(self) -> None:
+    def gen_stubs(self) -> List[Path]:
         content = self.parse_dir(self.source_dir)
         modules = self.organize(content)
+        stubs: List[Path] = []
         for module, data in modules.items():
             self.dest_dir.mkdir(parents=True, exist_ok=True)
             dest = self.dest_dir / f"{module}.pyi"
             self.gen_stub(dest, data)
+            stubs.append(dest)
+        return stubs
