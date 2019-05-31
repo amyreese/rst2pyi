@@ -189,7 +189,9 @@ class Converter:
                         param = lines[idx]
                         log.warning(
                             "%s:%d: Param missing from function call: %s",
-                            param.source, param.lineno, param.extra[1]
+                            param.source,
+                            param.lineno,
+                            param.extra[1],
                         )
 
                 for _, t, _ in params:
