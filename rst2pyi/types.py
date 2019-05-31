@@ -20,6 +20,7 @@ class Config:
     )
     method_template: str = "    def {name}(self, {args}) -> {ret_type}: ..."
     attribute_template: str = "    {name}: {attr_type} = ..."
+    data_template: str = "\n# {source}:{lineno}\n{name}: {attr_type} = ..."
     function_template: str = (
         "\n# {source}:{lineno}\ndef {name}({args}) -> {ret_type}: ..."
     )
