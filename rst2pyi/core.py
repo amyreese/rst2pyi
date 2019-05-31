@@ -103,6 +103,30 @@ class Converter:
             **kwargs,
         )
 
+    @staticmethod
+    def _split_types(t: str) -> Set[str]:
+        """Splits the types of all params into their individual pieces for import."""
+        out = set()
+        for typelist in t.split("["):
+            typelist = typelist.strip("]")
+            for subtype in typelist.split(","):
+                out.add(subtype.strip())
+        return out
+
+    @staticmethod
+    def _convert_type(t: str) -> str:
+        """Legacy rST can use " or " to express a type union so convert it
+           to PEP484 syntax. Documented here:
+           http://www.sphinx-doc.org/en/master/usage/restructuredtext/domains.html#info-field-lists"""
+        if " or " in t:
+            types = t.split(" or ")
+            if "None" in types:
+                types.remove("None")
+                return "Optional[{}]".format(", ".join(types))
+            else:
+                return "Union[{}]".format(", ".join(types))
+        return t
+
     def gen_stub(self, dest: Path, lines: Lines) -> None:
         log.debug("generating stub %s", dest)
         config = self.config
@@ -136,7 +160,7 @@ class Converter:
 
                 name, param_str = match.groups()
                 if param_str is None:
-                    log.warning("Missing param string {} {}:{}".format(call, path, lineno))
+                    log.warning("Missing param string %s %s:%d", call, path, lineno)
                     content.append(
                         self.render(line, name=name, args="", ret_type="Any")
                     )
@@ -154,15 +178,7 @@ class Converter:
                     idx += 1
                     p_type, p_name = lines[idx].extra
 
-                    # Legacy rST can use " or " to express a type union so convert it to PEP484
-                    # syntax. Documented here: http://www.sphinx-doc.org/en/master/usage/restructuredtext/domains.html#info-field-lists
-                    if " or " in p_type:
-                        types = p_type.split(" or ")
-                        if "None" in types:
-                            types.remove("None")
-                            p_type = "Optional[{}]".format(", ".join(types))
-                        else:
-                            p_type = "Union[{}]".format(", ".join(types))
+                    p_type = Converter._convert_type(p_type)
                     matched = False
                     for pidx, (n, _, v) in enumerate(params):
                         if n == p_name:
@@ -172,17 +188,12 @@ class Converter:
                     if not matched:
                         param = lines[idx]
                         log.warning(
-                            "%s:%d: Param missing from function call: %s", param.source, param.lineno, param.extra[1]
+                            "%s:%d: Param missing from function call: %s",
+                            param.source, param.lineno, param.extra[1]
                         )
 
-                # This splits the types of all params into their individual pieces for import.
                 for _, t, _ in params:
-                    for typelist in t.split("["):
-                        typelist = typelist.strip("]")
-                        for subtype in typelist.split(","):
-                            if subtype.strip() == "in":
-                                raise RuntimeError("{} {}".format(path, lineno))
-                            type_names.add(subtype.strip())
+                    type_names.update(Converter._split_types(t))
 
                 args = ", ".join(
                     (
