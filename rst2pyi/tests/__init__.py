@@ -3,3 +3,5 @@
 
 from rst2pyi.core import Converter
 from rst2pyi.types import Line, Lines
+
+from .core import ConverterTest

@@ -115,16 +115,25 @@ class Converter:
 
     @staticmethod
     def _convert_type(t: str) -> str:
-        """Legacy rST can use " or " to express a type union so convert it
-           to PEP484 syntax. Documented here:
-           http://www.sphinx-doc.org/en/master/usage/restructuredtext/domains.html#info-field-lists"""
+        """
+        Legacy rST can use " or " to express type unions so convert it to PEP484 syntax.
+
+        Documented here:
+        http://www.sphinx-doc.org/en/master/usage/restructuredtext/domains.html#info-field-lists
+        """
         if " or " in t:
             types = t.split(" or ")
             if "None" in types:
                 types.remove("None")
-                return "Optional[{}]".format(", ".join(types))
+                if len(types) > 1:
+                    return f"Optional[Union[{', '.join(types)}]]"
+                elif len(types) == 1:
+                    return f"Optional[{types[0]}]"
+                else:
+                    log.error("converting type string with no other types: %s", t)
+                    return t
             else:
-                return "Union[{}]".format(", ".join(types))
+                return f"Union[{', '.join(types)}]"
         return t
 
     def gen_stub(self, dest: Path, lines: Lines) -> None:
