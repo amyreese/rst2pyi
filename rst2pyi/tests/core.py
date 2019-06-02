@@ -1,9 +1,9 @@
 # Copyright 2019 John Reese
 # Licensed under the MIT license
 
-from rst2pyi.core import Converter
-
 from unittest import TestCase
+
+from rst2pyi.core import Converter
 
 
 class ConverterTest(TestCase):
