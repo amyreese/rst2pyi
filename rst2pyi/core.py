@@ -16,7 +16,7 @@ from .types import Config, Line, Lines
 log = logging.getLogger(__name__)
 directive_re = re.compile(r"\s*..\s+(\w+)::\s+([^\n]+)")
 callable_re = re.compile(r"\s*(\w+)(?:\(([^\)]*)\))?")
-info_re = re.compile(r"\s*:(\w+)\s+[!~]?(.+)\s+(\w+):")
+info_re = re.compile(r"\s*:([a-z]+)\s+[!~]?([^:]+)\s+([^:]+):")
 
 
 def setup_logger(debug: bool = False):
@@ -103,6 +103,39 @@ class Converter:
             **kwargs,
         )
 
+    @staticmethod
+    def _split_types(t: str) -> Set[str]:
+        """Splits the types of all params into their individual pieces for import."""
+        out = set()
+        for typelist in t.split("["):
+            typelist = typelist.strip("]")
+            for subtype in typelist.split(","):
+                out.add(subtype.strip())
+        return out
+
+    @staticmethod
+    def _convert_type(t: str) -> str:
+        """
+        Legacy rST can use " or " to express type unions so convert it to PEP484 syntax.
+
+        Documented here:
+        http://www.sphinx-doc.org/en/master/usage/restructuredtext/domains.html#info-field-lists
+        """
+        if " or " in t:
+            types = t.split(" or ")
+            if "None" in types:
+                types.remove("None")
+                if len(types) > 1:
+                    return f"Optional[Union[{', '.join(types)}]]"
+                elif len(types) == 1:
+                    return f"Optional[{types[0]}]"
+                else:
+                    log.error("converting type string with no other types: %s", t)
+                    return t
+            else:
+                return f"Union[{', '.join(types)}]"
+        return t
+
     def gen_stub(self, dest: Path, lines: Lines) -> None:
         log.debug("generating stub %s", dest)
         config = self.config
@@ -136,6 +169,7 @@ class Converter:
 
                 name, param_str = match.groups()
                 if param_str is None:
+                    log.warning("Missing param string %s %s:%d", call, path, lineno)
                     content.append(
                         self.render(line, name=name, args="", ret_type="Any")
                     )
@@ -152,12 +186,26 @@ class Converter:
                 while idx + 1 < count and lines[idx + 1].kind == "param":
                     idx += 1
                     p_type, p_name = lines[idx].extra
+
+                    p_type = Converter._convert_type(p_type)
+                    matched = False
                     for pidx, (n, _, v) in enumerate(params):
                         if n == p_name:
                             params[pidx][1] = p_type
+                            matched = True
                             break
+                    if not matched:
+                        param = lines[idx]
+                        log.warning(
+                            "%s:%d: Param missing from function call: %s",
+                            param.source,
+                            param.lineno,
+                            param.extra[1],
+                        )
 
-                type_names.update(t for _, t, _ in params)
+                for _, t, _ in params:
+                    type_names.update(Converter._split_types(t))
+
                 args = ", ".join(
                     (
                         self.render(
@@ -179,7 +227,7 @@ class Converter:
                 attr_type = "Any"
                 type_names.add(attr_type)
                 content.append(
-                    self.render(line, kind="attribute", name=name, attr_type=attr_type)
+                    self.render(line, kind=kind, name=name, attr_type=attr_type)
                 )
             else:
                 log.warning(
