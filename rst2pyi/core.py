@@ -154,7 +154,7 @@ class Converter:
                     content.append(self.render(line, kind="module", name=name))
 
             elif kind in ("class", "method", "function"):
-                call, = extra
+                (call,) = extra
                 match = callable_re.match(call)
                 if not match:
                     idx += 1
