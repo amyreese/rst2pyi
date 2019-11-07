@@ -40,7 +40,7 @@ def main(
 
     if validate:
         success = True
-        from typed_ast.ast3 import parse
+        from typed_ast.ast3 import parse  # pylint: disable=import-outside-toplevel
 
         for stub in stubs:
             with open(stub, "r") as f:
