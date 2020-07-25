@@ -1,9 +1,9 @@
 black==19.10b0
-codecov==2.0.22
-coverage==5.1
-isort==4.3.21
-mypy==0.770
-pylint==2.5.2
+codecov==2.1.8
+coverage==5.2
+isort==5.1.2
+mypy==0.782
+pylint==2.5.3
 python-coveralls==2.9.3
-twine==3.1.1
+twine==3.2.0
 wheel==0.34.2
