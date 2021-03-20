@@ -5,5 +5,5 @@ isort==5.7.0
 mypy==0.812
 pylint==2.7.2
 python-coveralls==2.9.3
-twine==3.3.0
+twine==3.4.1
 wheel==0.36.2
